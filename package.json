@@ -16,7 +16,6 @@
   "author": "Silvio Massari",
   "license": "MIT",
   "dependencies": {
-    "request": "2.12.0",
     "xpath": "0.0.5",
     "xmldom": "0.1.16",
     "node-uuid": "1.4.0",
