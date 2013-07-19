@@ -97,6 +97,32 @@ describe("Util", function() {
             }
         });
 
+        it("should fail on invalid username", function (done) {
+
+            try {
+                new Util({ host: "foo", username: 10 } );
+                throw new Error ("Had to be thrown");
+            } catch (e) {
+                assert.ok(e);
+                assert.ok(e instanceof Error);
+                assert.equal("'settings.username' property must be a string.", e.message);
+                done();
+            }
+        });
+
+        it("should fail on invalid password", function (done) {
+
+            try {
+                new Util({ host: "foo", password: 10 } );
+                throw new Error ("Had to be thrown");
+            } catch (e) {
+                assert.ok(e);
+                assert.ok(e instanceof Error);
+                assert.equal("'settings.password' property must be a string.", e.message);
+                done();
+            }
+        });
+
         it("should work.", function (done) {
 
             var util = new Util({ host: "foo" });
