@@ -45,7 +45,7 @@ All public methods has the same signature. The signature has two arguments: `opt
 
 #### authenticate(options, callback)
 
-This method should be used to authenticate user's credentials. A successed authentication will return an object instance containing the `auth` property. The value of this property is the athentication token that will be required by other methods.
+This method should be used to authenticate user's credentials. A successed authentication will return an object instance containing the `auth` property. The value of this property is the authentication token that will be required by other methods.
 
 **Parameters:**
 * `options`: A required object instance containing authentication's parameters:
