@@ -220,7 +220,49 @@ describe("Util", function() {
                 loginNock.done();
                 authzNock.done();
                 metadataNock.done();
-               done(); 
+                done(); 
+            });
+        });
+
+
+        it ("should cache authentication", function(done) {
+
+            var saml = samlTemplate
+                .replace("{username}", username)
+                .replace("{password}", password);
+
+            var loginNock = new nock("https://login.microsoftonline.com")
+                .post("/extSTS.srf", saml)  
+                .reply(200, successResponse);
+
+            var authzNock = new nock("https://sp.com")
+                .post("/_forms/default.aspx?wa=wsignin1.0", "authToken")
+                .reply(200, "", { "set-cookie": ["FedAuth=xyz", "rtFa=pqr"] });
+
+            var metadataNock = new nock("https://sp.com")
+                .matchHeader('cookie', 'FedAuth=xyz;rtFa=pqr')
+                .get("/_api/$metadata")
+                .reply(200, metadata, { "content-type": "application/xml" });
+
+            var util = new Util(settings);
+            util.authenticate({ username: username, password: password }, function (err, result) {
+
+                assert.ok(!err);
+                assert.ok(result);
+                assert.equal('string', typeof result.auth);
+                assert.equal(36, result.auth.length);
+    
+                util.authenticate({ username: username, password: password }, function (err2, result2) {
+
+                    assert.ok(!err2);
+                    assert.ok(result2);
+                    assert.equal(result.auth, result2.auth);
+
+                    loginNock.done();
+                    authzNock.done();
+                    metadataNock.done();
+                    done(); 
+                });
             });
         });
 
