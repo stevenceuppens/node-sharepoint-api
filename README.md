@@ -10,6 +10,14 @@ Use npm to install the module:
 > npm install sharepoint-api
 ```
 
+## Runing tests
+
+Use npm to run the set of tests
+
+```
+> npm test
+```
+
 ## API
 
 Due to the asynchrounous nature of Nodejs, this module uses callbacks in requests. All callbacks have 2 arguments: `err` and `data`.
