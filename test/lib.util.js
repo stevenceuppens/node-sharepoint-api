@@ -3,6 +3,10 @@ var Util    = require("../lib/util.js");
 var nock    = require("nock");
 var fs      = require("fs");
 
+var nowPlusMilliseconds = function(ms) {
+    return new Date(new Date().getTime() + ms);
+};
+
 describe("Util", function() {
 
     this.timeout(10000);
@@ -14,8 +18,11 @@ describe("Util", function() {
     var username = "alfa";
     var password = "beta";
 
-    var successResponseTemplate = "<S:Envelope xmnls:S=\"\" xmnls:wst=\"\" xmnls:wsse=\"\" xmnls=\"\"><S:Body><wst:RequestSecurityTokenResponse><wst:RequestedSecurityToken><wsse:BinarySecurityToken Id=\"0\">{token}</wsse:BinarySecurityToken></wst:RequestedSecurityToken></wst:RequestSecurityTokenResponse></S:Body></S:Envelope>";
-    var successResponse = successResponseTemplate.replace("{token}", "authToken");
+    var successResponseTemplate = "<S:Envelope xmnls:S=\"\" xmnls:wst=\"\" xmnls:wsse=\"\" xmnls:wsu=\"\" xmnls=\"\"><S:Body><wst:RequestSecurityTokenResponse><wst:Lifetime><wsu:Created>{created}</wsu:Created><wsu:Expires>{expires}</wsu:Expires></wst:Lifetime><wst:RequestedSecurityToken><wsse:BinarySecurityToken Id=\"0\">{token}</wsse:BinarySecurityToken></wst:RequestedSecurityToken></wst:RequestSecurityTokenResponse></S:Body></S:Envelope>";
+    var successResponse = successResponseTemplate
+        .replace("{created}", new Date().toISOString())
+        .replace("{expires}", nowPlusMilliseconds(15 * 60000).toISOString())
+        .replace("{token}", "authToken");
 
     var failureResponse = "<S:Envelope xmnls:S=\"\" xmnls:psf=\"\"><S:Body><S:Fault><S:Detail><psf:error><psf:internalerror><psf:text>{error}</psf:text></psf:internalerror></psf:error></S:Detail></S:Fault></S:Body></S:Envelope>"
         .replace("{error}", "failure");
@@ -224,7 +231,6 @@ describe("Util", function() {
             });
         });
 
-
         it ("should cache authentication", function(done) {
 
             var saml = samlTemplate
@@ -266,6 +272,133 @@ describe("Util", function() {
             });
         });
 
+        it ("should drop expired items from auth cache", function(done) {
+
+            var saml = samlTemplate
+                .replace("{username}", username)
+                .replace("{password}", password);
+
+            // will authenticate twice because item got expired
+            var loginNock = new nock("https://login.microsoftonline.com")
+                .post("/extSTS.srf", saml)  
+                .reply(200, successResponse)
+                .post("/extSTS.srf", saml)  
+                .reply(200, successResponse);
+
+            // will authorize twice because item got expired
+            var authzNock = new nock("https://sp.com")
+                .post("/_forms/default.aspx?wa=wsignin1.0", "authToken")
+                .reply(200, "", { "set-cookie": ["FedAuth=xyz", "rtFa=pqr"] })
+                .post("/_forms/default.aspx?wa=wsignin1.0", "authToken")
+                .reply(200, "", { "set-cookie": ["FedAuth=xyz", "rtFa=pqr"] });
+
+            // Metadata will be retrieved just once.
+            var metadataNock = new nock("https://sp.com")
+                .matchHeader('cookie', 'FedAuth=xyz;rtFa=pqr')
+                .get("/_api/$metadata")
+                .reply(200, metadata, { "content-type": "application/xml" });
+
+            var timeout = 100;
+
+            var util = new Util({ host: settings. host, timeout: timeout });
+            util.authenticate({ username: username, password: password }, function (err, result) {
+
+                assert.ok(!err);
+                assert.ok(result);
+                assert.equal('string', typeof result.auth);
+                assert.equal(36, result.auth.length);
+    
+                setTimeout( function() {
+                    util.authenticate({ username: username, password: password }, function (err2, result2) {
+
+                        assert.ok(!err2);
+                        assert.ok(result2);
+                        assert.equal('string', typeof result2.auth);
+                        assert.equal(36, result2.auth.length);
+                        assert.ok(result.auth !== result2.auth);
+
+                        loginNock.done();
+                        authzNock.done();
+                        metadataNock.done();
+                        done(); 
+                    });
+                }, timeout + 100);
+            });
+        });
+
+        it ("should renew expired items tokens", function(done) {
+
+            var expirationMilliseconds = 1100;
+
+            var saml = samlTemplate
+                .replace("{username}", username)
+                .replace("{password}", password);
+
+            // will authenticate twice because item got expired
+            var loginNock = new nock("https://login.microsoftonline.com")
+                .post("/extSTS.srf", saml)  
+                .reply(200, function() {
+                    // returns a token that expires en 200 ms
+                    return successResponseTemplate
+                        .replace("{created}", new Date().toISOString())
+                        .replace("{expires}", nowPlusMilliseconds(expirationMilliseconds + 60000).toISOString())
+                        .replace("{token}", "authTokenExpiresSoon");
+                })
+                .post("/extSTS.srf", saml)  
+                .reply(200, successResponse); // returns a normal token
+
+            // will authorize twice because token got expired
+            var authzNock = new nock("https://sp.com")
+                .post("/_forms/default.aspx?wa=wsignin1.0", "authTokenExpiresSoon")
+                .reply(200, "", { "set-cookie": ["FedAuth=xyz", "rtFa=pqr"] })  // first authz
+                .post("/_forms/default.aspx?wa=wsignin1.0", "authToken")
+                .reply(200, "", { "set-cookie": ["FedAuth=rst", "rtFa=uvw"] }); // second authz
+
+            
+            var spNock = new nock("https://sp.com")
+                .matchHeader('cookie', 'FedAuth=xyz;rtFa=pqr')  // Should match first authz
+                .get("/_api/$metadata")                         // Metadata will be retrieved just once.
+                .reply(200, metadata, { "content-type": "application/xml" })
+                .get("/_api/Lists?$inlinecount=none")           // invocation to query list
+                .reply(200, {foo: "bar"}, { "content-type": "application/json" });
+
+            var spNock2 = new nock("https://sp.com")
+                .matchHeader('cookie', 'FedAuth=rst;rtFa=uvw')  // Should match second authz
+                .get("/_api/Users?$inlinecount=none")           // invocation to query users
+                .reply(200, {foo: "baz"}, { "content-type": "application/json" });
+
+            var util = new Util(settings);
+            util.authenticate({ username: username, password: password }, function (err, result) {
+
+                assert.ok(!err);
+                assert.ok(result);
+                assert.equal('string', typeof result.auth);
+                assert.equal(36, result.auth.length);
+    
+                util.query({ auth: result.auth, resource: "Lists" }, function(err, result2) {
+
+                    assert.ok(!err);
+                    assert.ok(result2);
+                    assert.equal("bar", result2.data.foo);
+
+                    setTimeout( function() {
+
+                        util.query({ auth: result.auth, resource: "Users" }, function(err, result3) {
+
+                            assert.ok(!err);
+                            assert.ok(result3);
+                            assert.equal("baz", result3.data.foo);
+
+                            loginNock.done();
+                            authzNock.done();
+                            spNock.done();
+                            spNock2.done();
+                            done(); 
+                        });
+                    }, expirationMilliseconds + 100);
+                });
+            });
+        });
 
         it ("should cache the entity sets", function(done) {
 
@@ -1286,3 +1419,4 @@ describe("Util", function() {
         });
     });
 });
+

@@ -1,7 +1,7 @@
 {
   "name": "sharepoint-api",
-  "version": "0.1.1",
-  "description": "toto",
+  "version": "0.1.2",
+  "description": "'SharePoint Online' client for Nodejs",
   "main": "index.js",
   "scripts": {
     "test": "mocha -R spec test"
