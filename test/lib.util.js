@@ -21,7 +21,7 @@ describe("Util", function() {
     var successResponseTemplate = "<S:Envelope xmnls:S=\"\" xmnls:wst=\"\" xmnls:wsse=\"\" xmnls:wsu=\"\" xmnls=\"\"><S:Body><wst:RequestSecurityTokenResponse><wst:Lifetime><wsu:Created>{created}</wsu:Created><wsu:Expires>{expires}</wsu:Expires></wst:Lifetime><wst:RequestedSecurityToken><wsse:BinarySecurityToken Id=\"0\">{token}</wsse:BinarySecurityToken></wst:RequestedSecurityToken></wst:RequestSecurityTokenResponse></S:Body></S:Envelope>";
     var successResponse = successResponseTemplate
         .replace("{created}", new Date().toISOString())
-        .replace("{expires}", nowPlusMilliseconds(15 * 60000).toISOString())
+        .replace("{expires}", nowPlusMilliseconds(15 * 60000).toISOString()) // in 15 minutes
         .replace("{token}", "authToken");
 
     var failureResponse = "<S:Envelope xmnls:S=\"\" xmnls:psf=\"\"><S:Body><S:Fault><S:Detail><psf:error><psf:internalerror><psf:text>{error}</psf:text></psf:internalerror></psf:error></S:Detail></S:Fault></S:Body></S:Envelope>"
@@ -327,25 +327,14 @@ describe("Util", function() {
         });
 
         it ("should renew expired items tokens", function(done) {
+            this.timeout(5000);
 
-            var expirationMilliseconds = 1100;
-
+            var expirationMilliseconds = 2000;
+            var firstTokenExpiresOn = nowPlusMilliseconds(expirationMilliseconds + 60000); // I'm adding a minute because the util.js removes a minute for avoid time conflict
+            
             var saml = samlTemplate
                 .replace("{username}", username)
                 .replace("{password}", password);
-
-            // will authenticate twice because item got expired
-            var loginNock = new nock("https://login.microsoftonline.com")
-                .post("/extSTS.srf", saml)  
-                .reply(200, function() {
-                    // returns a token that expires en 200 ms
-                    return successResponseTemplate
-                        .replace("{created}", new Date().toISOString())
-                        .replace("{expires}", nowPlusMilliseconds(expirationMilliseconds + 60000).toISOString())
-                        .replace("{token}", "authTokenExpiresSoon");
-                })
-                .post("/extSTS.srf", saml)  
-                .reply(200, successResponse); // returns a normal token
 
             // will authorize twice because token got expired
             var authzNock = new nock("https://sp.com")
@@ -366,6 +355,19 @@ describe("Util", function() {
                 .matchHeader('cookie', 'FedAuth=rst;rtFa=uvw')  // Should match second authz
                 .get("/_api/Users?$inlinecount=none")           // invocation to query users
                 .reply(200, {foo: "baz"}, { "content-type": "application/json" });
+
+            // will authenticate twice because item got expired
+            var loginNock = new nock("https://login.microsoftonline.com")
+                .post("/extSTS.srf", saml)  
+                .reply(200, function() {
+                    // returns a token that expires en 200 ms
+                    return successResponseTemplate
+                        .replace("{created}", new Date().toISOString())
+                        .replace("{expires}", firstTokenExpiresOn.toISOString())
+                        .replace("{token}", "authTokenExpiresSoon");
+                })
+                .post("/extSTS.srf", saml)  
+                .reply(200, successResponse); // returns a normal token
 
             var util = new Util(settings);
             util.authenticate({ username: username, password: password }, function (err, result) {
@@ -395,7 +397,7 @@ describe("Util", function() {
                             spNock2.done();
                             done(); 
                         });
-                    }, expirationMilliseconds + 100);
+                    }, expirationMilliseconds);
                 });
             });
         });
@@ -696,6 +698,38 @@ describe("Util", function() {
             });
         });
 
+
+
+        it("should return an empty array if '$metadata'is not supported by sharepoint server.", function (done) {
+
+            util.authenticate = function(options, cb) {
+                
+                util.cacheAuth.set("xyz", {
+                    authz       : { FedAuth:"alfa", rtFa:"beta"},
+                    cookieAuthz : 'FedAuth=alfa;rtFa=beta',
+                    username    : username,
+                    password    : password
+                });
+
+                cb(null, { auth: "xyz"} );
+            };
+
+            var spNock = new nock("https://sp.com")
+                .matchHeader('cookie', 'FedAuth=alfa;rtFa=beta')
+                .get("/_api/$metadata")
+                .reply(404);
+
+            util.entitySets({ username: username, password: password }, function (err, result) {
+                
+                assert.ok(!err);
+                assert.ok(result);
+                assert.ok(result instanceof Array);
+                assert.equal(result.length, 0);
+
+                spNock.done();
+                done();
+            });
+        });
     });
 
     describe("get method", function() {
