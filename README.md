@@ -37,6 +37,8 @@ The module exports a class and its constructor requires a configuration object w
 * `timeout`: Optional integer for the session timeout in milleseconds. Default 15 minutes.  
 * `username`: Optional SharePoint Online's user name.
 * `password`: Optional user's password.
+* `useBasicAuth`: Flag that indicates the use of basic auth (sharepoint on-premise support).
+
 
 ```
 var SharePoint = require("sharepoint-api");

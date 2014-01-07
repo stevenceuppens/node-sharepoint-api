@@ -15,6 +15,11 @@ describe("Util", function() {
         host:"sp.com"
     };
 
+    var basicAuthSettings = {
+        host:"sp.com",
+        useBasicAuth: true
+    };
+
     var username = "alfa";
     var password = "beta";
 
@@ -449,6 +454,45 @@ describe("Util", function() {
                     metadataNock.done();
                     done(); 
                 });
+            });
+        });
+    });
+
+    describe("basic authentication",  function() {
+
+        it ("should fail if password is invalid", function(done) {
+
+            var loginNock = new nock("https://sp.com")
+            .get("/_api/lists")  
+            .reply(401, failureResponse);
+
+            new Util(basicAuthSettings).authenticate({ username: username, password: "invalid password" }, function (err, result) {
+
+                assert.ok(err);
+                assert.ok(err instanceof Error);
+                assert.equal("Authentication fail.", err.message);
+
+                loginNock.done();
+                done(); 
+            });
+        });
+
+        it ("should authenticate using basic auth", function(done) {
+
+            var loginNock = new nock("https://sp.com")
+            .matchHeader('Authorization', 'Basic ' + new Buffer(username + ':' + password).toString('base64'))
+            .get("/_api/lists")  
+            .reply(200, successResponse);
+
+            new Util(basicAuthSettings).authenticate({ username: username, password: password }, function (err, result) {
+
+                assert.ok(!err);
+                assert.ok(result);
+                assert.equal('string', typeof result.auth);
+                assert.equal(36, result.auth.length);
+
+                loginNock.done();
+                done(); 
             });
         });
     });
