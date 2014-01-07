@@ -20,7 +20,7 @@
     "xmldom": "0.1.16",
     "node-uuid": "1.4.0",
     "cookie": "0.1.0",
-    "mem-cache": "0.0.1"
+    "mem-cache": "0.0.3"
   },
   "devDependencies": {
     "mocha": "1.11.0",
