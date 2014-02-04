@@ -61,6 +61,7 @@ describe("API", function() {
                 this.replace = function(options, cb) { cb(null, "replace"); };
                 this.update= function(options, cb) { cb(null, "update"); };
                 this.remove= function(options, cb) { cb(null, "remove"); };
+                this.lookupMethod = function(instance, name, cb) { cb(null, name); };
             }
         });
         
@@ -144,6 +145,13 @@ describe("API", function() {
         it("should map Util's 'remove' method ", function (done) {
             api.remove({}, function(err, val) { 
                 assert.ok("remove", val);
+                done();
+            });
+        });
+
+        it("should map Util's 'lookupMethod' method ", function (done) {
+            api.lookupMethod("foo", function(err, val) { 
+                assert.ok(val, "foo");
                 done();
             });
         });

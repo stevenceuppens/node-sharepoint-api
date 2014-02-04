@@ -1,6 +1,6 @@
 {
   "name": "sharepoint-api",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "'SharePoint Online' client for Nodejs",
   "main": "index.js",
   "scripts": {
@@ -20,7 +20,8 @@
     "xmldom": "0.1.16",
     "node-uuid": "1.4.0",
     "cookie": "0.1.0",
-    "mem-cache": "0.0.3"
+    "mem-cache": "0.0.3",
+    "simple-errors": "0.0.4"
   },
   "devDependencies": {
     "mocha": "1.11.0",

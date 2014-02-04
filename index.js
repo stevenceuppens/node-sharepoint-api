@@ -19,6 +19,9 @@ var Sharepoint = function (settings) {
     // validates arguments
     if (!settings || typeof(settings)!=="object") throw new Error("'settings' argument must be a valid object instance.");
 
+    // auto reference
+    var self = this;
+
     // creates an instance of class that handles all requests
     var util = new Util(settings);
 
@@ -31,7 +34,17 @@ var Sharepoint = function (settings) {
     * @api public
     */
     this.authenticate = function(options, cb) {
-        util.authenticate(options, cb)
+        util.authenticate(options, cb);
+    };
+
+    /*
+    * gets a method by its name
+    * @param name {string} required. Method's name.
+    * @param cb {function} required. Callback function.
+    * @api public
+    */
+    this.lookupMethod = function(name, cb) {
+        util.lookupMethod(self, name, cb);
     };
 
     /*

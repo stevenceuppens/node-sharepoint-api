@@ -1326,10 +1326,9 @@ describe("Util", function() {
         });
     });
 
-
     describe("hook method", function() {
 
-        it ("should add methods after an user was authenticated", function (done) {
+        it("should add methods after an user was authenticated", function (done) {
 
             var saml = samlTemplate
                 .replace("{username}", username)
@@ -1371,7 +1370,7 @@ describe("Util", function() {
         });
 
 
-        it ("should add methods if an user already was authenticated", function (done) {
+        it("should add methods if an user already was authenticated", function (done) {
 
             var saml = samlTemplate
                 .replace("{username}", username)
@@ -1408,7 +1407,7 @@ describe("Util", function() {
             });
         });
 
-        it ("Should map correct methods", function() {
+        it("Should map correct methods", function() {
 
             var target = {};
 
@@ -1496,5 +1495,164 @@ describe("Util", function() {
             });
         });
     });
+
+    describe("lookupMethod method", function() {
+
+        describe("after methods were hooked", function() {
+
+            var target;
+            var util;
+            var username = "alfa";
+            var password = "beta";
+
+            beforeEach( function (done) {
+
+                var saml = samlTemplate
+                    .replace("{username}", username)
+                    .replace("{password}", password);
+
+                var loginNock = new nock("https://login.microsoftonline.com")
+                    .post("/extSTS.srf", saml)  
+                    .reply(200, successResponse);
+
+                var authzNock = new nock("https://sp.com")
+                    .post("/_forms/default.aspx?wa=wsignin1.0", "authToken")
+                    .reply(200, "", { "set-cookie": ["FedAuth=xyz", "rtFa=pqr"] });
+
+                var metadataNock = new nock("https://sp.com")
+                    .matchHeader('cookie', 'FedAuth=xyz;rtFa=pqr')
+                    .get("/_api/$metadata")
+                    .reply(200, metadata, { "content-type": "application/xml" });
+
+                target = {};
+                util = new Util(settings);
+                util.hook(target);
+
+                assert.ok(!target.getLists);
+                util.authenticate({ username: username, password: password }, function (err, result) {
+                    assert.ok(!err);
+                    assert.ok(result);
+                    done(); 
+                });
+
+            });
+
+            it ("should return the method if it does exist", function (done) {
+                util.lookupMethod(target, "getLists", function (err, method) {
+                    assert.ok(!err);
+                    assert.equal(typeof method, "function");
+                    done();
+                });
+            });
+
+            it ("should return null if the method does not exist", function (done) {
+                util.lookupMethod(target, "invaid method name", function (err, method) {
+                    assert.ok(!err);
+                    assert.ok(!method);
+                    done();
+                });
+            });
+        });
+
+        describe("if methods where not hooked yet", function() {
+
+            var target;
+            var util;
+            var loginNock;
+            var authzNock;
+            var metadataNock;
+            var username = "alfa";
+            var password = "beta";
+
+            beforeEach( function () {
+
+                var saml = samlTemplate
+                    .replace("{username}", username)
+                    .replace("{password}", password);
+
+                loginNock = new nock("https://login.microsoftonline.com")
+                    .post("/extSTS.srf", saml)  
+                    .reply(200, successResponse);
+
+                authzNock = new nock("https://sp.com")
+                    .post("/_forms/default.aspx?wa=wsignin1.0", "authToken")
+                    .reply(200, "", { "set-cookie": ["FedAuth=xyz", "rtFa=pqr"] });
+
+                metadataNock = new nock("https://sp.com")
+                    .matchHeader('cookie', 'FedAuth=xyz;rtFa=pqr')
+                    .get("/_api/$metadata")
+                    .reply(200, metadata, { "content-type": "application/xml" });
+
+                target = {};
+                util = new Util(settings);
+                util.hook(target);
+
+                assert.ok(!target.queryLists);
+            });
+
+            it("if the method does exist, should wait until all methods were hooked and then return the method.", function (done) {
+
+                assert.ok(!loginNock.isDone());
+                assert.ok(!authzNock.isDone());
+                assert.ok(!metadataNock.isDone());
+
+                // the method returned is a wrapper, so metadata will be retrieved after the wrapper was invoked. 
+                util.lookupMethod(target, "queryLists", function (err, method) {
+
+                    assert.ok(!err);
+                    assert.equal(typeof method, "function");
+
+                    assert.ok(!loginNock.isDone());
+                    assert.ok(!authzNock.isDone());
+                    assert.ok(!metadataNock.isDone());
+
+                    // mock query method
+                    util.query = function (options, queryCb) {
+                        queryCb(null, []);
+                    };
+
+                    method({ username: username, password: password }, function (err, result) {
+        
+                        loginNock.done();
+                        authzNock.done();
+                        metadataNock.done();
+
+                        assert.ok(!err);
+                        assert.ok(result);
+                        done();
+                    });
+                });
+            });
+
+            it("if the method does not exist,should wait until all methods were hooked and return null.", function (done) {
+
+                assert.ok(!loginNock.isDone());
+                assert.ok(!authzNock.isDone());
+                assert.ok(!metadataNock.isDone());
+
+                // the method returned is a wrapper, so metadata will be retrieved after the wrapper was invoked. 
+                util.lookupMethod(target, "invalid", function (err, method) {
+
+                    assert.ok(!err);
+                    assert.equal(typeof method, "function");
+
+                    assert.ok(!loginNock.isDone());
+                    assert.ok(!authzNock.isDone());
+                    assert.ok(!metadataNock.isDone());
+
+                    method({ username: username, password: password }, function (err, result) {
+        
+                        loginNock.done();
+                        authzNock.done();
+                        metadataNock.done();
+
+                        assert.ok(!err);
+                        assert.ok(!result);
+                        done();
+                    });
+                });
+            });
+        });
+     });
 });
 
