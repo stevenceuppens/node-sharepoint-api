@@ -38,7 +38,7 @@ The module exports a class and its constructor requires a configuration object w
 * `username`: Optional SharePoint Online's user name.
 * `password`: Optional user's password.
 * `useBasicAuth`: Flag that indicates the use of basic auth (sharepoint on-premise support).
-
+* `site`: Optional SharePoint sub-site
 
 ```
 var SharePoint = require("sharepoint-api");
